@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const path = require('path');
 const pLimit = require('p-limit');
 const { ensureDir, fileExists, sanitizeFilename } = require('./utils/file_utils');
@@ -6,9 +6,28 @@ const logger = require('./utils/logger');
 const config = require('../config');
 
 /**
+ * 检查 yt-dlp 是否已安装
+ */
+function checkYtDlp() {
+  try {
+    execSync('yt-dlp --version', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 使用 yt-dlp 下载单个视频的音频
  */
 async function downloadAudio(video, uid, pageNum = null) {
+  // 检查 yt-dlp 是否安装
+  if (!checkYtDlp()) {
+    const errorMsg = '未检测到 yt-dlp，请先安装: pip install yt-dlp 或 brew install yt-dlp (Mac) 或下载 https://github.com/yt-dlp/yt-dlp/releases';
+    logger.error(errorMsg);
+    return { success: false, error: errorMsg, path: '' };
+  }
+
   const { bvid, title } = video;
 
   // 构建文件名
@@ -39,30 +58,37 @@ async function downloadAudio(video, uid, pageNum = null) {
     '--audio-quality', config.download.quality,
     '-o', outputPath,
     '--no-playlist',
-    '--quiet',
-    '--no-warnings',
+    '--progress',
     url,
   ];
 
   return new Promise((resolve) => {
-    const process = spawn('yt-dlp', args);
+    logger.info(`开始下载: ${bvid} -> ${fileName}`);
+    const ytdlp = spawn('yt-dlp', args);
 
+    let stdout = '';
     let stderr = '';
 
-    process.stderr.on('data', (data) => {
+    ytdlp.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    ytdlp.stderr.on('data', (data) => {
       stderr += data.toString();
     });
 
-    process.on('close', (code) => {
+    ytdlp.on('close', (code) => {
       if (code === 0) {
+        logger.success(`下载完成: ${fileName}`);
         resolve({ success: true, path: outputPath, skipped: false });
       } else {
-        logger.error(`下载失败 [${bvid}]: ${stderr}`);
-        resolve({ success: false, error: stderr, path: outputPath });
+        const errorMsg = stderr || stdout || `退出码: ${code}`;
+        logger.error(`下载失败 [${bvid}]: ${errorMsg}`);
+        resolve({ success: false, error: errorMsg, path: outputPath });
       }
     });
 
-    process.on('error', (err) => {
+    ytdlp.on('error', (err) => {
       logger.error(`yt-dlp 执行错误: ${err.message}`);
       resolve({ success: false, error: err.message, path: outputPath });
     });
@@ -169,6 +195,7 @@ function getAudioPath(uid, bvid, pageNum = null) {
 }
 
 module.exports = {
+  checkYtDlp,
   downloadAudio,
   downloadVideos,
   downloadSingleVideo,

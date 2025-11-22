@@ -6,7 +6,7 @@ const fs = require('fs-extra');
 const open = require('open');
 
 const { fetchAllVideos, fetchVideoInfo, saveVideoList } = require('./step1_fetch_videos');
-const { downloadVideos, downloadSingleVideo } = require('./step2_download');
+const { downloadVideos, downloadSingleVideo, checkYtDlp } = require('./step2_download');
 const { transcribeVideos, transcribeAudio, getAccessToken } = require('./step3_transcribe');
 const { saveAllTranscripts, saveTranscript } = require('./utils/formatter');
 const ProgressManager = require('./utils/progress');
@@ -162,6 +162,13 @@ app.post('/api/download-only', async (req, res) => {
   try {
     const { uid, videos } = req.body;
 
+    // 检查 yt-dlp 是否安装
+    if (!checkYtDlp()) {
+      return res.status(400).json({
+        error: '未检测到 yt-dlp，请先安装:\n• Windows: 下载 https://github.com/yt-dlp/yt-dlp/releases 并放入 PATH\n• Mac: brew install yt-dlp\n• Linux: pip install yt-dlp'
+      });
+    }
+
     res.json({ success: true, message: '下载任务已开始' });
 
     // 异步执行下载
@@ -201,7 +208,14 @@ app.post('/api/transcribe-only', async (req, res) => {
 // 开始采集任务
 app.post('/api/start-task', async (req, res) => {
   try {
-    const { uid, videos, format = 'md' } = req.body;
+    const { uid, videos, format = 'md', engine = 'baidu' } = req.body;
+
+    // 检查 yt-dlp 是否安装
+    if (!checkYtDlp()) {
+      return res.status(400).json({
+        error: '未检测到 yt-dlp，请先安装:\n• Windows: 下载 https://github.com/yt-dlp/yt-dlp/releases 并放入 PATH\n• Mac: brew install yt-dlp\n• Linux: pip install yt-dlp'
+      });
+    }
 
     // 加载设置
     if (await fs.pathExists(SETTINGS_FILE)) {
@@ -210,14 +224,14 @@ app.post('/api/start-task', async (req, res) => {
       config.baidu.secretKey = settings.secretKey;
     }
 
-    if (!config.baidu.apiKey || !config.baidu.secretKey) {
+    if (engine === 'baidu' && (!config.baidu.apiKey || !config.baidu.secretKey)) {
       return res.status(400).json({ error: '请先配置百度云 API Key' });
     }
 
     res.json({ success: true, message: '任务已开始' });
 
     // 异步执行任务
-    runTask(uid, videos, format);
+    runTask(uid, videos, format, engine);
 
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -225,7 +239,7 @@ app.post('/api/start-task', async (req, res) => {
 });
 
 // 执行采集任务
-async function runTask(uid, videos, format) {
+async function runTask(uid, videos, format, engine = 'baidu') {
   const progressManager = new ProgressManager(uid);
   await progressManager.load();
 
@@ -261,7 +275,8 @@ async function runTask(uid, videos, format) {
     }
 
     // Step 2: 语音转文字
-    sendProgress('step', { step: 2, name: '语音转文字' });
+    const engineNames = { baidu: '百度云', whisper: 'Whisper', tingwu: '通义听悟' };
+    sendProgress('step', { step: 2, name: `语音转文字 (${engineNames[engine] || engine})` });
 
     const transcriptResults = [];
     for (let i = 0; i < videos.length; i++) {
@@ -278,7 +293,16 @@ async function runTask(uid, videos, format) {
 
       try {
         const audioPath = path.join(config.output.downloadDir, uid, `${video.bvid}.${config.download.format}`);
-        const transcript = await transcribeAudio(audioPath);
+        let transcript = '';
+
+        if (engine === 'baidu') {
+          transcript = await transcribeAudio(audioPath);
+        } else if (engine === 'whisper') {
+          throw new Error('Whisper 引擎暂未实现');
+        } else if (engine === 'tingwu') {
+          // TODO: 实现通义听悟 Playwright 方案
+          throw new Error('通义听悟引擎暂未实现');
+        }
 
         await progressManager.updateStatus(video.bvid, 'transcribed', { transcript });
         transcriptResults.push({ video, transcript, success: true });

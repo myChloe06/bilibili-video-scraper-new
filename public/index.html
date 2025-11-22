@@ -628,8 +628,10 @@
       progressCard.classList.remove('active');
       logCard.classList.remove('active');
       completeCard.classList.remove('hidden');
+
+      const actionText = data.downloadOnly ? '下载' : '转写';
       completeInfo.innerHTML = `
-        <p>成功转写: <strong>${data.success}</strong> 个视频</p>
+        <p>成功${actionText}: <strong>${data.success}</strong> 个视频</p>
         <p>失败: <strong>${data.failed}</strong> 个视频</p>
         <p>输出目录: <code>${data.outputDir}</code></p>
       `;
