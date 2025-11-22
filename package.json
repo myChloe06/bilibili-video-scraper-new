@@ -1,0 +1,26 @@
+{
+  "name": "bilibili-video-scraper",
+  "version": "1.0.0",
+  "description": "自动采集 Bilibili 博主视频并转换为文字稿",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "channel": "node src/index.js channel",
+    "single": "node src/index.js single"
+  },
+  "keywords": [
+    "bilibili",
+    "video",
+    "transcript",
+    "speech-to-text"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "chalk": "^4.1.2",
+    "commander": "^11.1.0",
+    "fs-extra": "^11.2.0",
+    "p-limit": "^3.1.0"
+  }
+}
