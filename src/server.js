@@ -8,6 +8,7 @@ const open = require('open');
 const { fetchAllVideos, fetchVideoInfo, saveVideoList } = require('./step1_fetch_videos');
 const { downloadVideos, downloadSingleVideo, checkYtDlp } = require('./step2_download');
 const { transcribeVideos, transcribeAudio, getAccessToken } = require('./step3_transcribe');
+const { transcribeWithTingwu } = require('./step3_transcribe_tingwu');
 const { saveAllTranscripts, saveTranscript } = require('./utils/formatter');
 const ProgressManager = require('./utils/progress');
 const { extractUid, extractBvid } = require('./utils/file_utils');
@@ -300,8 +301,7 @@ async function runTask(uid, videos, format, engine = 'baidu') {
         } else if (engine === 'whisper') {
           throw new Error('Whisper 引擎暂未实现');
         } else if (engine === 'tingwu') {
-          // TODO: 实现通义听悟 Playwright 方案
-          throw new Error('通义听悟引擎暂未实现');
+          transcript = await transcribeWithTingwu(audioPath, sendProgress);
         }
 
         await progressManager.updateStatus(video.bvid, 'transcribed', { transcript });
@@ -425,11 +425,9 @@ async function runTranscribeOnly(uid, videos, format, engine) {
         if (engine === 'baidu') {
           transcript = await transcribeAudio(audioPath);
         } else if (engine === 'whisper') {
-          // TODO: 实现 Whisper 转写
           throw new Error('Whisper 引擎暂未实现');
         } else if (engine === 'tingwu') {
-          // TODO: 实现通义听悟转写
-          throw new Error('通义听悟引擎暂未实现');
+          transcript = await transcribeWithTingwu(audioPath, sendProgress);
         }
 
         await progressManager.updateStatus(video.bvid, 'transcribed', { transcript });
