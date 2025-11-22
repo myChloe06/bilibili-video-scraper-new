@@ -88,7 +88,7 @@ app.post('/api/test-connection', async (req, res) => {
   }
 });
 
-// 获取视频列表
+// 获取视频列表（频道模式）
 app.post('/api/fetch-videos', async (req, res) => {
   try {
     const { input, startDate, endDate } = req.body;
@@ -118,6 +118,81 @@ app.post('/api/fetch-videos', async (req, res) => {
       filtered: filteredVideos.length,
       videos: filteredVideos,
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 获取单个视频信息（单视频模式）
+app.post('/api/fetch-single-video', async (req, res) => {
+  try {
+    const { input } = req.body;
+
+    const bvid = extractBvid(input);
+    if (!bvid) {
+      return res.status(400).json({ error: '无效的 BV号 或视频链接' });
+    }
+
+    sendProgress('status', { message: '正在获取视频信息...' });
+
+    const video = await fetchVideoInfo(bvid);
+
+    res.json({
+      uid: String(video.owner.mid),
+      video: {
+        bvid: video.bvid,
+        aid: video.aid,
+        title: video.title,
+        description: video.description,
+        pic: video.pic,
+        duration: video.duration,
+        pubdate: video.pubdate,
+        owner: video.owner,
+        pages: video.pages,
+        url: video.url,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 只下载音频（不转写）
+app.post('/api/download-only', async (req, res) => {
+  try {
+    const { uid, videos } = req.body;
+
+    res.json({ success: true, message: '下载任务已开始' });
+
+    // 异步执行下载
+    runDownloadOnly(uid, videos);
+
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 只转写（已下载的音频）
+app.post('/api/transcribe-only', async (req, res) => {
+  try {
+    const { uid, videos, format = 'md', engine = 'baidu' } = req.body;
+
+    // 加载设置
+    if (await fs.pathExists(SETTINGS_FILE)) {
+      const settings = await fs.readJson(SETTINGS_FILE);
+      config.baidu.apiKey = settings.apiKey;
+      config.baidu.secretKey = settings.secretKey;
+    }
+
+    if (engine === 'baidu' && (!config.baidu.apiKey || !config.baidu.secretKey)) {
+      return res.status(400).json({ error: '请先配置百度云 API Key' });
+    }
+
+    res.json({ success: true, message: '转写任务已开始' });
+
+    // 异步执行转写
+    runTranscribeOnly(uid, videos, format, engine);
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -219,6 +294,134 @@ async function runTask(uid, videos, format) {
 
     // Step 3: 保存文字稿
     sendProgress('step', { step: 3, name: '保存文字稿' });
+
+    await saveAllTranscripts(transcriptResults, uid, format);
+
+    // 更新完成状态
+    for (const result of transcriptResults) {
+      if (result.success) {
+        await progressManager.updateStatus(result.video.bvid, 'completed');
+        sendProgress('video-status', { bvid: result.video.bvid, status: 'completed' });
+      }
+    }
+
+    sendProgress('complete', {
+      success: transcriptResults.filter(r => r.success).length,
+      failed: transcriptResults.filter(r => !r.success).length,
+      outputDir: path.join(config.output.transcriptDir, uid),
+    });
+
+  } catch (error) {
+    sendProgress('error', { message: error.message });
+  }
+}
+
+// 只下载音频任务
+async function runDownloadOnly(uid, videos) {
+  const progressManager = new ProgressManager(uid);
+  await progressManager.load();
+
+  try {
+    sendProgress('step', { step: 1, name: '下载音频' });
+
+    let success = 0;
+    let failed = 0;
+
+    for (let i = 0; i < videos.length; i++) {
+      const video = videos[i];
+      sendProgress('video-status', {
+        bvid: video.bvid,
+        status: 'downloading',
+        progress: { current: i + 1, total: videos.length }
+      });
+
+      try {
+        const { downloadAudio } = require('./step2_download');
+        const result = await downloadAudio(video, uid);
+
+        if (result.success) {
+          await progressManager.updateStatus(video.bvid, 'downloaded', {
+            audioPath: result.path,
+          });
+          sendProgress('video-status', { bvid: video.bvid, status: 'downloaded' });
+          success++;
+        } else {
+          sendProgress('video-status', { bvid: video.bvid, status: 'error', error: result.error });
+          failed++;
+        }
+      } catch (error) {
+        sendProgress('video-status', { bvid: video.bvid, status: 'error', error: error.message });
+        failed++;
+      }
+
+      sendProgress('progress', { current: i + 1, total: videos.length, phase: 'download' });
+    }
+
+    sendProgress('complete', {
+      success,
+      failed,
+      outputDir: path.join(config.output.downloadDir, uid),
+      downloadOnly: true,
+    });
+
+  } catch (error) {
+    sendProgress('error', { message: error.message });
+  }
+}
+
+// 只转写音频任务
+async function runTranscribeOnly(uid, videos, format, engine) {
+  const progressManager = new ProgressManager(uid);
+  await progressManager.load();
+
+  try {
+    sendProgress('step', { step: 1, name: `语音转文字 (${engine})` });
+
+    const transcriptResults = [];
+
+    for (let i = 0; i < videos.length; i++) {
+      const video = videos[i];
+
+      sendProgress('video-status', {
+        bvid: video.bvid,
+        status: 'transcribing',
+        progress: { current: i + 1, total: videos.length }
+      });
+
+      try {
+        const audioPath = path.join(config.output.downloadDir, uid, `${video.bvid}.${config.download.format}`);
+
+        // 检查音频文件是否存在
+        if (!(await fs.pathExists(audioPath))) {
+          throw new Error('音频文件不存在，请先下载');
+        }
+
+        let transcript = '';
+
+        if (engine === 'baidu') {
+          transcript = await transcribeAudio(audioPath);
+        } else if (engine === 'whisper') {
+          // TODO: 实现 Whisper 转写
+          throw new Error('Whisper 引擎暂未实现');
+        } else if (engine === 'tingwu') {
+          // TODO: 实现通义听悟转写
+          throw new Error('通义听悟引擎暂未实现');
+        }
+
+        await progressManager.updateStatus(video.bvid, 'transcribed', { transcript });
+        transcriptResults.push({ video, transcript, success: true });
+
+        sendProgress('video-status', { bvid: video.bvid, status: 'transcribed' });
+      } catch (error) {
+        sendProgress('video-status', { bvid: video.bvid, status: 'error', error: error.message });
+        transcriptResults.push({ video, error: error.message, success: false });
+      }
+
+      sendProgress('progress', { current: i + 1, total: videos.length, phase: 'transcribe' });
+    }
+
+    // 保存文字稿
+    sendProgress('step', { step: 2, name: '保存文字稿' });
 
     await saveAllTranscripts(transcriptResults, uid, format);
 

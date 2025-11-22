@@ -407,6 +407,14 @@
             <option value="json">JSON</option>
           </select>
         </div>
+        <div class="form-group" style="max-width: 180px;">
+          <label>转写引擎</label>
+          <select id="transcribeEngine">
+            <option value="baidu">百度云 (推荐)</option>
+            <option value="whisper">Whisper (本地)</option>
+            <option value="tingwu">通义听悟</option>
+          </select>
+        </div>
       </div>
     </div>
 
@@ -414,8 +422,10 @@
     <div class="card hidden" id="filterResultCard">
       <div class="filter-info" id="filterInfo"></div>
       <div class="video-list" id="videoList"></div>
-      <div class="start-btn-container">
-        <button class="btn btn-primary start-btn" id="startBtn">开始采集</button>
+      <div class="start-btn-container" style="display: flex; gap: 15px; justify-content: center;">
+        <button class="btn btn-secondary start-btn" id="downloadOnlyBtn">只下载音频</button>
+        <button class="btn btn-primary start-btn" id="startBtn">下载并转写</button>
+        <button class="btn btn-primary start-btn hidden" id="transcribeOnlyBtn">转写已下载</button>
       </div>
     </div>
 
@@ -449,6 +459,7 @@
   <script>
     // 状态
     let videos = [];
+    let currentUid = '';
     let ws = null;
 
     // 元素
@@ -466,10 +477,13 @@
     const endDate = document.getElementById('endDate');
     const limitCount = document.getElementById('limitCount');
     const outputFormat = document.getElementById('outputFormat');
+    const transcribeEngine = document.getElementById('transcribeEngine');
     const filterResultCard = document.getElementById('filterResultCard');
     const filterInfo = document.getElementById('filterInfo');
     const videoList = document.getElementById('videoList');
     const startBtn = document.getElementById('startBtn');
+    const downloadOnlyBtn = document.getElementById('downloadOnlyBtn');
+    const transcribeOnlyBtn = document.getElementById('transcribeOnlyBtn');
     const progressCard = document.getElementById('progressCard');
     const logCard = document.getElementById('logCard');
     const progressBar = document.getElementById('progressBar');
@@ -478,6 +492,11 @@
     const logBox = document.getElementById('logBox');
     const completeCard = document.getElementById('completeCard');
     const completeInfo = document.getElementById('completeInfo');
+
+    // 获取当前模式
+    function getMode() {
+      return document.querySelector('[name="mode"]:checked').value;
+    }
 
     // 初始化
     async function init() {
@@ -726,33 +745,58 @@
       fetchVideosBtn.textContent = '获取中...';
 
       try {
-        const res = await fetch('/api/fetch-videos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            input,
-            startDate: enableDateFilter.checked ? startDate.value : null,
-            endDate: enableDateFilter.checked ? endDate.value : null
-          })
-        });
-        const data = await res.json();
+        const mode = getMode();
+        let data;
 
-        if (data.error) {
-          alert(data.error);
-          return;
+        if (mode === 'single') {
+          // 单视频模式
+          const res = await fetch('/api/fetch-single-video', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ input })
+          });
+          data = await res.json();
+
+          if (data.error) {
+            alert(data.error);
+            return;
+          }
+
+          currentUid = data.uid;
+          videos = [data.video];
+          filterInfo.innerHTML = `视频: <strong>${data.video.title}</strong><br>UP主: ${data.video.owner.name}`;
+
+        } else {
+          // 频道模式
+          const res = await fetch('/api/fetch-videos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              input,
+              startDate: enableDateFilter.checked ? startDate.value : null,
+              endDate: enableDateFilter.checked ? endDate.value : null
+            })
+          });
+          data = await res.json();
+
+          if (data.error) {
+            alert(data.error);
+            return;
+          }
+
+          currentUid = data.uid;
+          videos = data.videos;
+
+          // 应用数量限制
+          const limit = parseInt(limitCount.value);
+          if (limit && limit > 0) {
+            videos = videos.slice(0, limit);
+          }
+
+          filterInfo.innerHTML = enableDateFilter.checked
+            ? `共找到 <strong>${data.total}</strong> 个视频，日期范围内 <strong>${data.filtered}</strong> 个${limit ? `，限制 <strong>${videos.length}</strong> 个` : ''}`
+            : `共找到 <strong>${data.total}</strong> 个视频${limit ? `，限制 <strong>${videos.length}</strong> 个` : ''}`;
         }
-
-        videos = data.videos;
-
-        // 应用数量限制
-        const limit = parseInt(limitCount.value);
-        if (limit && limit > 0) {
-          videos = videos.slice(0, limit);
-        }
-
-        filterInfo.innerHTML = enableDateFilter.checked
-          ? `共找到 <strong>${data.total}</strong> 个视频，日期范围内 <strong>${data.filtered}</strong> 个${limit ? `，限制 <strong>${videos.length}</strong> 个` : ''}`
-          : `共找到 <strong>${data.total}</strong> 个视频${limit ? `，限制 <strong>${videos.length}</strong> 个` : ''}`;
 
         renderVideoList(videoList, videos);
         filterResultCard.classList.remove('hidden');
@@ -765,42 +809,91 @@
       }
     });
 
+    // 开始下载并转写
     startBtn.addEventListener('click', async () => {
       if (videos.length === 0) {
         alert('没有可处理的视频');
         return;
       }
 
-      // 显示进度区域
-      filterResultCard.classList.add('hidden');
-      progressCard.classList.add('active');
-      logCard.classList.add('active');
-      completeCard.classList.add('hidden');
-
-      // 复制视频列表到进度区域
-      renderVideoList(progressVideoList, videos);
-
-      // 清空日志
-      logBox.innerHTML = '';
+      startProgressUI();
 
       try {
-        const input = targetInput.value.trim();
-        const match = input.match(/(\d+)/);
-        const uid = match ? match[0] : input;
-
         await fetch('/api/start-task', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            uid,
+            uid: currentUid,
             videos,
-            format: outputFormat.value
+            format: outputFormat.value,
+            engine: transcribeEngine.value
           })
         });
       } catch (e) {
         alert('启动失败: ' + e.message);
       }
     });
+
+    // 只下载音频
+    downloadOnlyBtn.addEventListener('click', async () => {
+      if (videos.length === 0) {
+        alert('没有可处理的视频');
+        return;
+      }
+
+      startProgressUI();
+
+      try {
+        await fetch('/api/download-only', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uid: currentUid,
+            videos
+          })
+        });
+      } catch (e) {
+        alert('启动失败: ' + e.message);
+      }
+    });
+
+    // 转写已下载的音频
+    transcribeOnlyBtn.addEventListener('click', async () => {
+      if (videos.length === 0) {
+        alert('没有可处理的视频');
+        return;
+      }
+
+      startProgressUI();
+
+      try {
+        await fetch('/api/transcribe-only', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uid: currentUid,
+            videos,
+            format: outputFormat.value,
+            engine: transcribeEngine.value
+          })
+        });
+      } catch (e) {
+        alert('启动失败: ' + e.message);
+      }
+    });
+
+    // 启动进度界面
+    function startProgressUI() {
+      filterResultCard.classList.add('hidden');
+      progressCard.classList.add('active');
+      logCard.classList.add('active');
+      completeCard.classList.add('hidden');
+      renderVideoList(progressVideoList, videos);
+      logBox.innerHTML = '';
+      progressBar.style.width = '0%';
+      progressBar.textContent = '0%';
+      currentStatus.textContent = '正在启动...';
+    }
 
     document.getElementById('restartBtn').addEventListener('click', () => {
       location.reload();
