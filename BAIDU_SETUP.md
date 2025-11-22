@@ -1,17 +1,20 @@
-# 百度云语音识别配置指南
+# 百度云「音频文件转写」配置指南
 
-## 🎯 快速开始
+## 快速开始
 
-百度云语音识别是推荐的转录方案之一，具有以下优势：
+百度云「音频文件转写」是本项目推荐的语音识别方案，具有以下优势：
 
-- ✅ **10小时免费额度**（每月）
-- ✅ **准确率高**（针对中文优化）
-- ✅ **速度快**（云端并发处理）
-- ✅ **简单易用**（纯 API 调用，无需安装模型）
+- **10小时免费额度**（每月）
+- **支持长音频**（适合 B站视频）
+- **支持 mp3 格式**（无需转换）
+- **准确率高**（针对中文优化）
+- **异步处理**（批量提交，自动等待结果）
+
+**API 文档**：https://cloud.baidu.com/doc/SPEECH/s/Klbxern8v
 
 ---
 
-## 📝 申请 API Key 步骤
+## 申请 API Key 步骤
 
 ### 1. 注册百度云账号
 
@@ -21,14 +24,18 @@
 
 访问：https://console.bce.baidu.com/ai/#/ai/speech/overview/index
 
-### 3. 创建应用
+### 3. 领取免费额度
+
+首次使用需要在「语音技术 - 概览」页面领取免费额度。
+
+### 4. 创建应用
 
 1. 点击「创建应用」
 2. 填写应用名称（如：bilibili-scraper）
-3. 选择应用类型：其他
+3. 勾选「音频文件转写」能力
 4. 点击「立即创建」
 
-### 4. 获取密钥
+### 5. 获取密钥
 
 创建成功后，你会看到：
 
@@ -38,22 +45,19 @@ API Key: xxxxxxxxxxxxxxxxxxxx
 Secret Key: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-**复制 API Key 和 Secret Key**（下一步要用）
+**复制 API Key 和 Secret Key**
 
 ---
 
-## ⚙️ 配置密钥
-
-### 方式 1：直接在 config.js 中配置（推荐）
+## 配置密钥
 
 编辑 `config.js` 文件：
 
 ```javascript
-// 步骤3C: 百度云语音识别 API
 baidu: {
   enabled: true,
-  apiKey: '你的API_KEY',        // ← 填在这里
-  secretKey: '你的SECRET_KEY',  // ← 填在这里
+  apiKey: '你的API_KEY',        // <- 填在这里
+  secretKey: '你的SECRET_KEY',  // <- 填在这里
   concurrent: 5,
 },
 ```
@@ -69,41 +73,16 @@ baidu: {
 },
 ```
 
-### 方式 2：使用环境变量（高级）
-
-如果你不想把密钥直接写在代码里，可以使用环境变量：
-
-1. 创建 `.env` 文件：
-   ```bash
-   cp .env.example .env
-   ```
-
-2. 编辑 `.env`：
-   ```
-   BAIDU_API_KEY=你的API_KEY
-   BAIDU_SECRET_KEY=你的SECRET_KEY
-   ```
-
-3. 修改 `config.js`：
-   ```javascript
-   baidu: {
-     enabled: true,
-     apiKey: process.env.BAIDU_API_KEY || '',
-     secretKey: process.env.BAIDU_SECRET_KEY || '',
-     concurrent: 5,
-   },
-   ```
-
 ---
 
-## 🚀 使用百度云转录
+## 使用测试
 
 ### 测试运行（推荐）
 
 先测试 3 个视频：
 
 ```bash
-npm run channel 1514320538 -- --engine baidu --limit 3
+npm run channel 1514320538 -- --limit 3
 ```
 
 ### 正式运行
@@ -111,41 +90,56 @@ npm run channel 1514320538 -- --engine baidu --limit 3
 采集所有视频：
 
 ```bash
-npm run channel 1514320538 -- --engine baidu
+npm run channel 1514320538
 ```
 
 ### 单视频模式
 
 ```bash
-npm run single BV1xx411c7mD -- --engine baidu
+npm run single BV1xx411c7mD
 ```
 
 ---
 
-## 📊 性能和费用
+## API 调用流程
 
-### 性能对比（127个视频，每个10分钟）
+本项目使用百度云「音频文件转写」异步接口，流程如下：
 
-| 方案 | 时间 | 费用 | 准确率 |
-|------|------|------|--------|
-| **百度云** | 30-40分钟 | 0元（免费额度内） | ⭐⭐⭐⭐ |
-| **通义听悟** | 2-3小时 | 0元（需确认额度） | ⭐⭐⭐⭐⭐ |
-| **Whisper (GPU)** | 1-1.5小时 | 0元 | ⭐⭐⭐⭐ |
-| **Whisper (CPU)** | 3-4小时 | 0元 | ⭐⭐⭐⭐ |
+```
+1. 获取 Access Token
+   POST https://aip.baidubce.com/oauth/2.0/token
 
-### 费用说明
+2. 创建转写任务
+   POST https://aip.baidubce.com/rpc/2.0/aasr/v1/create
+   - 提交音频 URL
+   - 获取 task_id
 
-- **免费额度**：10 小时/月
-- **超出后收费**：约 2.5元/小时
-- **127个视频（21小时）**：
-  - 免费额度内：10 小时 = 0元
-  - 超出部分：11 小时 × 2.5元 = 27.5元
+3. 轮询查询结果
+   POST https://aip.baidubce.com/rpc/2.0/aasr/v1/query
+   - 使用 task_id 查询
+   - 等待状态变为 "Success"
 
-**结论：测试少量视频完全免费，批量采集成本也很低！**
+4. 获取文字结果
+```
+
+**注意**：音频需要通过可访问的 URL 提交，本项目会自动将本地音频上传到临时存储。
 
 ---
 
-## 🔍 故障排查
+## 费用说明
+
+| 项目 | 说明 |
+|------|------|
+| **免费额度** | 10 小时/月 |
+| **超出后收费** | 约 2.5元/小时 |
+
+**示例计算**（127个视频，每个约10分钟 = 21小时）：
+- 免费额度：10 小时 = 0元
+- 超出部分：11 小时 × 2.5元 = 27.5元
+
+---
+
+## 故障排查
 
 ### 问题 1：提示「百度云 API 未配置」
 
@@ -173,52 +167,18 @@ npm run single BV1xx411c7mD -- --engine baidu
 
 **解决：**
 - 使用高质量音频源
-- 对比通义听悟的结果
-- 调整下载音频质量（config.js 中 step2.quality）
+- 调整下载音频质量（config.js 中 download.quality）
 
 ### 问题 4：超过免费额度
 
 **解决：**
 - 查看控制台的用量统计
-- 考虑切换到 Whisper（完全免费）
-- 或者分批处理，每月用免费额度
+- 分批处理，每月用免费额度
+- 或直接付费继续使用
 
 ---
 
-## 💡 对比测试建议
-
-为了选择最适合你的方案，建议同时测试百度云和通义听悟：
-
-```bash
-# 测试百度云（3个视频）
-npm run channel 1514320538 -- --engine baidu --limit 3
-
-# 测试通义听悟（同样的3个视频）
-npm run channel 1514320538 -- --engine tingwu --limit 3
-
-# 对比结果
-# 查看 transcripts/1514320538/ 目录
-# 对比文字稿的准确率和完整性
-```
-
-**对比维度：**
-1. ✅ 准确率（有没有错别字）
-2. ✅ 完整性（有没有遗漏）
-3. ✅ 标点符号（是否正确）
-4. ✅ 速度（哪个更快）
-5. ✅ 稳定性（是否经常失败）
-
----
-
-## 📞 获取帮助
-
-- **百度云文档**：https://cloud.baidu.com/doc/SPEECH/s/0lbxfnc9b
-- **控制台**：https://console.bce.baidu.com/ai/#/ai/speech/overview/index
-- **问题反馈**：项目 GitHub Issues
-
----
-
-## ⭐ 推荐配置
+## 推荐配置
 
 ```javascript
 // config.js 推荐配置
@@ -227,13 +187,14 @@ baidu: {
   enabled: true,
   apiKey: '你的API_KEY',
   secretKey: '你的SECRET_KEY',
-  concurrent: 5,  // 并发数：5个同时处理（速度快）
+  concurrent: 5,        // 并发数：5个同时处理
+  pollInterval: 5000,   // 查询间隔：5秒
 },
 
-step2: {
+download: {
   concurrent: 3,
-  outputFormat: 'mp3',
-  quality: '128',  // 音频质量：128kbps（足够清晰）
+  format: 'mp3',
+  quality: '128',       // 音频质量：128kbps
 },
 
 output: {
@@ -241,4 +202,10 @@ output: {
 },
 ```
 
-这样配置可以获得最佳的速度和质量平衡！
+---
+
+## 相关链接
+
+- **API 文档**：https://cloud.baidu.com/doc/SPEECH/s/Klbxern8v
+- **控制台**：https://console.bce.baidu.com/ai/#/ai/speech/overview/index
+- **计费说明**：https://cloud.baidu.com/doc/SPEECH/s/9k38lxpww
