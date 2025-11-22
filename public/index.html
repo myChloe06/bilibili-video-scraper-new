@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bilibili 视频文字稿采集器</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      color: white;
+      text-align: center;
+      margin-bottom: 20px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+
+    .card-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 2px solid #eee;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 15px;
+      align-items: center;
+    }
+
+    .form-group {
+      flex: 1;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 5px;
+    }
+
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+    }
+
+    .btn-primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-secondary {
+      background: #f0f0f0;
+      color: #333;
+    }
+
+    .btn-secondary:hover {
+      background: #e0e0e0;
+    }
+
+    .btn-small {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 8px;
+    }
+
+    .status-dot.red { background: #e74c3c; }
+    .status-dot.green { background: #2ecc71; }
+    .status-dot.yellow { background: #f1c40f; }
+
+    .radio-group {
+      display: flex;
+      gap: 20px;
+    }
+
+    .radio-group label {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .radio-group input {
+      margin-right: 6px;
+    }
+
+    .date-filter {
+      background: #f8f9fa;
+      border-radius: 8px;
+      padding: 15px;
+      margin-top: 15px;
+    }
+
+    .date-filter-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .date-filter-header input {
+      margin-right: 8px;
+    }
+
+    .quick-dates {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .quick-dates button {
+      padding: 5px 12px;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 15px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .quick-dates button:hover {
+      border-color: #667eea;
+      color: #667eea;
+    }
+
+    .quick-dates button.active {
+      background: #667eea;
+      color: white;
+      border-color: #667eea;
+    }
+
+    .progress-section {
+      display: none;
+    }
+
+    .progress-section.active {
+      display: block;
+    }
+
+    .progress-bar-container {
+      background: #eee;
+      border-radius: 10px;
+      height: 20px;
+      overflow: hidden;
+      margin: 15px 0;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 10px;
+      transition: width 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .video-list {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #eee;
+      border-radius: 8px;
+    }
+
+    .video-item {
+      display: flex;
+      align-items: center;
+      padding: 10px 15px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .video-item:last-child {
+      border-bottom: none;
+    }
+
+    .video-status-icon {
+      width: 24px;
+      height: 24px;
+      margin-right: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .video-status-icon.pending { color: #bbb; }
+    .video-status-icon.downloading, .video-status-icon.transcribing { color: #3498db; }
+    .video-status-icon.completed { color: #2ecc71; }
+    .video-status-icon.error { color: #e74c3c; }
+
+    .video-info {
+      flex: 1;
+    }
+
+    .video-title {
+      font-size: 14px;
+      color: #333;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .video-date {
+      font-size: 12px;
+      color: #999;
+    }
+
+    .log-box {
+      background: #1e1e1e;
+      border-radius: 8px;
+      padding: 15px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    .log-item {
+      margin-bottom: 5px;
+    }
+
+    .log-item.info { color: #3498db; }
+    .log-item.success { color: #2ecc71; }
+    .log-item.error { color: #e74c3c; }
+    .log-item.warn { color: #f1c40f; }
+
+    .filter-info {
+      background: #e8f4fd;
+      border-left: 4px solid #3498db;
+      padding: 10px 15px;
+      margin: 15px 0;
+      border-radius: 0 8px 8px 0;
+      font-size: 14px;
+      color: #333;
+    }
+
+    .start-btn-container {
+      text-align: center;
+      margin: 20px 0;
+    }
+
+    .start-btn {
+      padding: 15px 50px;
+      font-size: 18px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .spinning {
+      animation: spin 1s linear infinite;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Bilibili 视频文字稿采集器</h1>
+
+    <!-- API 配置 -->
+    <div class="card">
+      <div class="card-title">API 配置</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>百度云 API Key</label>
+          <input type="text" id="apiKey" placeholder="请输入 API Key">
+        </div>
+        <div class="form-group">
+          <label>百度云 Secret Key</label>
+          <input type="password" id="secretKey" placeholder="请输入 Secret Key">
+        </div>
+      </div>
+      <div class="form-row">
+        <button class="btn btn-secondary" id="testBtn">测试连接</button>
+        <button class="btn btn-primary" id="saveSettingsBtn">保存设置</button>
+        <span id="connectionStatus">
+          <span class="status-dot red"></span>未配置
+        </span>
+      </div>
+    </div>
+
+    <!-- 采集设置 -->
+    <div class="card">
+      <div class="card-title">采集设置</div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>模式</label>
+          <div class="radio-group">
+            <label><input type="radio" name="mode" value="channel" checked> 频道模式</label>
+            <label><input type="radio" name="mode" value="single"> 单视频模式</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label id="inputLabel">博主 UID 或空间链接</label>
+          <input type="text" id="targetInput" placeholder="例如: 1514320538 或 https://space.bilibili.com/1514320538">
+        </div>
+        <button class="btn btn-primary" id="fetchVideosBtn">获取视频列表</button>
+      </div>
+
+      <!-- 日期筛选 -->
+      <div class="date-filter" id="dateFilter">
+        <div class="date-filter-header">
+          <input type="checkbox" id="enableDateFilter">
+          <label for="enableDateFilter">启用日期筛选</label>
+        </div>
+        <div class="form-row" id="dateInputs" style="display: none;">
+          <div class="form-group">
+            <label>开始日期</label>
+            <input type="date" id="startDate">
+          </div>
+          <div class="form-group">
+            <label>结束日期</label>
+            <input type="date" id="endDate">
+          </div>
+        </div>
+        <div class="quick-dates" id="quickDates" style="display: none;">
+          <button data-range="thisMonth">本月</button>
+          <button data-range="lastMonth">上月</button>
+          <button data-range="last3Months">近3月</button>
+          <button data-range="thisYear">今年</button>
+          <button data-range="all">全部</button>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group" style="max-width: 150px;">
+          <label>限制数量</label>
+          <input type="number" id="limitCount" placeholder="留空=全部" min="1">
+        </div>
+        <div class="form-group" style="max-width: 150px;">
+          <label>输出格式</label>
+          <select id="outputFormat">
+            <option value="md">Markdown</option>
+            <option value="txt">纯文本</option>
+            <option value="json">JSON</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- 筛选结果 -->
+    <div class="card hidden" id="filterResultCard">
+      <div class="filter-info" id="filterInfo"></div>
+      <div class="video-list" id="videoList"></div>
+      <div class="start-btn-container">
+        <button class="btn btn-primary start-btn" id="startBtn">开始采集</button>
+      </div>
+    </div>
+
+    <!-- 进度 -->
+    <div class="card progress-section" id="progressCard">
+      <div class="card-title">进度</div>
+      <div id="currentStatus">等待开始...</div>
+      <div class="progress-bar-container">
+        <div class="progress-bar" id="progressBar" style="width: 0%">0%</div>
+      </div>
+      <div class="video-list" id="progressVideoList"></div>
+    </div>
+
+    <!-- 日志 -->
+    <div class="card progress-section" id="logCard">
+      <div class="card-title">日志</div>
+      <div class="log-box" id="logBox"></div>
+    </div>
+
+    <!-- 完成 -->
+    <div class="card hidden" id="completeCard">
+      <div class="card-title">采集完成</div>
+      <div id="completeInfo"></div>
+      <div style="margin-top: 15px;">
+        <button class="btn btn-primary" id="openOutputBtn">打开输出目录</button>
+        <button class="btn btn-secondary" id="restartBtn">重新开始</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 状态
+    let videos = [];
+    let ws = null;
+
+    // 元素
+    const apiKeyInput = document.getElementById('apiKey');
+    const secretKeyInput = document.getElementById('secretKey');
+    const testBtn = document.getElementById('testBtn');
+    const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+    const connectionStatus = document.getElementById('connectionStatus');
+    const targetInput = document.getElementById('targetInput');
+    const fetchVideosBtn = document.getElementById('fetchVideosBtn');
+    const enableDateFilter = document.getElementById('enableDateFilter');
+    const dateInputs = document.getElementById('dateInputs');
+    const quickDates = document.getElementById('quickDates');
+    const startDate = document.getElementById('startDate');
+    const endDate = document.getElementById('endDate');
+    const limitCount = document.getElementById('limitCount');
+    const outputFormat = document.getElementById('outputFormat');
+    const filterResultCard = document.getElementById('filterResultCard');
+    const filterInfo = document.getElementById('filterInfo');
+    const videoList = document.getElementById('videoList');
+    const startBtn = document.getElementById('startBtn');
+    const progressCard = document.getElementById('progressCard');
+    const logCard = document.getElementById('logCard');
+    const progressBar = document.getElementById('progressBar');
+    const currentStatus = document.getElementById('currentStatus');
+    const progressVideoList = document.getElementById('progressVideoList');
+    const logBox = document.getElementById('logBox');
+    const completeCard = document.getElementById('completeCard');
+    const completeInfo = document.getElementById('completeInfo');
+
+    // 初始化
+    async function init() {
+      // 加载设置
+      const res = await fetch('/api/settings');
+      const settings = await res.json();
+      if (settings.apiKey) {
+        apiKeyInput.value = settings.apiKey;
+        secretKeyInput.value = settings.secretKey;
+        updateConnectionStatus('configured');
+      }
+
+      // 设置默认日期
+      const today = new Date();
+      endDate.value = today.toISOString().split('T')[0];
+      const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+      startDate.value = firstDay.toISOString().split('T')[0];
+
+      // 连接 WebSocket
+      connectWebSocket();
+    }
+
+    function connectWebSocket() {
+      ws = new WebSocket(`ws://${location.host}`);
+      ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        handleWebSocketMessage(data);
+      };
+      ws.onclose = () => {
+        setTimeout(connectWebSocket, 1000);
+      };
+    }
+
+    function handleWebSocketMessage(data) {
+      switch (data.type) {
+        case 'status':
+          currentStatus.textContent = data.message;
+          addLog('info', data.message);
+          break;
+
+        case 'step':
+          currentStatus.textContent = `Step ${data.step}: ${data.name}`;
+          addLog('info', `===== Step ${data.step}: ${data.name} =====`);
+          break;
+
+        case 'progress':
+          const percent = Math.round((data.current / data.total) * 100);
+          progressBar.style.width = percent + '%';
+          progressBar.textContent = `${percent}% (${data.current}/${data.total})`;
+          break;
+
+        case 'video-status':
+          updateVideoStatus(data.bvid, data.status, data.error);
+          break;
+
+        case 'complete':
+          showComplete(data);
+          break;
+
+        case 'error':
+          addLog('error', data.message);
+          break;
+      }
+    }
+
+    function updateConnectionStatus(status) {
+      const dot = connectionStatus.querySelector('.status-dot');
+      if (status === 'configured') {
+        dot.className = 'status-dot green';
+        connectionStatus.innerHTML = '<span class="status-dot green"></span>已配置';
+      } else if (status === 'testing') {
+        dot.className = 'status-dot yellow';
+        connectionStatus.innerHTML = '<span class="status-dot yellow"></span>测试中...';
+      } else {
+        dot.className = 'status-dot red';
+        connectionStatus.innerHTML = '<span class="status-dot red"></span>未配置';
+      }
+    }
+
+    function addLog(type, message) {
+      const time = new Date().toLocaleTimeString();
+      const div = document.createElement('div');
+      div.className = `log-item ${type}`;
+      div.textContent = `[${time}] ${message}`;
+      logBox.appendChild(div);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function updateVideoStatus(bvid, status, error) {
+      const item = document.querySelector(`[data-bvid="${bvid}"]`);
+      if (!item) return;
+
+      const icon = item.querySelector('.video-status-icon');
+      icon.className = `video-status-icon ${status}`;
+
+      const icons = {
+        pending: '○',
+        downloading: '↓',
+        downloaded: '✓',
+        transcribing: '◐',
+        transcribed: '✓',
+        completed: '✓',
+        error: '✗'
+      };
+      icon.textContent = icons[status] || '○';
+
+      if (error) {
+        addLog('error', `[${bvid}] ${error}`);
+      }
+    }
+
+    function formatDate(timestamp) {
+      return new Date(timestamp * 1000).toISOString().split('T')[0];
+    }
+
+    function renderVideoList(container, videoData, showCheckbox = false) {
+      container.innerHTML = videoData.map(v => `
+        <div class="video-item" data-bvid="${v.bvid}">
+          <span class="video-status-icon pending">○</span>
+          <div class="video-info">
+            <div class="video-title">${v.title}</div>
+            <div class="video-date">${v.bvid} | ${formatDate(v.pubdate)}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function showComplete(data) {
+      progressCard.classList.remove('active');
+      logCard.classList.remove('active');
+      completeCard.classList.remove('hidden');
+      completeInfo.innerHTML = `
+        <p>成功转写: <strong>${data.success}</strong> 个视频</p>
+        <p>失败: <strong>${data.failed}</strong> 个视频</p>
+        <p>输出目录: <code>${data.outputDir}</code></p>
+      `;
+    }
+
+    // 事件监听
+    testBtn.addEventListener('click', async () => {
+      updateConnectionStatus('testing');
+      try {
+        const res = await fetch('/api/test-connection', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            apiKey: apiKeyInput.value,
+            secretKey: secretKeyInput.value
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          updateConnectionStatus('configured');
+          alert('连接成功!');
+        } else {
+          updateConnectionStatus('error');
+          alert('连接失败: ' + data.message);
+        }
+      } catch (e) {
+        updateConnectionStatus('error');
+        alert('连接失败: ' + e.message);
+      }
+    });
+
+    saveSettingsBtn.addEventListener('click', async () => {
+      try {
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            apiKey: apiKeyInput.value,
+            secretKey: secretKeyInput.value
+          })
+        });
+        updateConnectionStatus('configured');
+        alert('设置已保存');
+      } catch (e) {
+        alert('保存失败: ' + e.message);
+      }
+    });
+
+    enableDateFilter.addEventListener('change', () => {
+      dateInputs.style.display = enableDateFilter.checked ? 'flex' : 'none';
+      quickDates.style.display = enableDateFilter.checked ? 'flex' : 'none';
+    });
+
+    document.querySelectorAll('[data-range]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const range = btn.dataset.range;
+        const today = new Date();
+        let start, end;
+
+        switch (range) {
+          case 'thisMonth':
+            start = new Date(today.getFullYear(), today.getMonth(), 1);
+            end = today;
+            break;
+          case 'lastMonth':
+            start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+            end = new Date(today.getFullYear(), today.getMonth(), 0);
+            break;
+          case 'last3Months':
+            start = new Date(today.getFullYear(), today.getMonth() - 2, 1);
+            end = today;
+            break;
+          case 'thisYear':
+            start = new Date(today.getFullYear(), 0, 1);
+            end = today;
+            break;
+          case 'all':
+            start = new Date(2009, 0, 1);
+            end = today;
+            break;
+        }
+
+        startDate.value = start.toISOString().split('T')[0];
+        endDate.value = end.toISOString().split('T')[0];
+
+        document.querySelectorAll('[data-range]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+
+    // 模式切换
+    document.querySelectorAll('[name="mode"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        const isChannel = radio.value === 'channel';
+        document.getElementById('inputLabel').textContent = isChannel
+          ? '博主 UID 或空间链接'
+          : '视频 BV号 或链接';
+        targetInput.placeholder = isChannel
+          ? '例如: 1514320538 或 https://space.bilibili.com/1514320538'
+          : '例如: BV1xx411c7mD 或 https://www.bilibili.com/video/BV1xx411c7mD';
+        document.getElementById('dateFilter').style.display = isChannel ? 'block' : 'none';
+      });
+    });
+
+    fetchVideosBtn.addEventListener('click', async () => {
+      const input = targetInput.value.trim();
+      if (!input) {
+        alert('请输入博主 UID 或视频链接');
+        return;
+      }
+
+      fetchVideosBtn.disabled = true;
+      fetchVideosBtn.textContent = '获取中...';
+
+      try {
+        const res = await fetch('/api/fetch-videos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            input,
+            startDate: enableDateFilter.checked ? startDate.value : null,
+            endDate: enableDateFilter.checked ? endDate.value : null
+          })
+        });
+        const data = await res.json();
+
+        if (data.error) {
+          alert(data.error);
+          return;
+        }
+
+        videos = data.videos;
+
+        // 应用数量限制
+        const limit = parseInt(limitCount.value);
+        if (limit && limit > 0) {
+          videos = videos.slice(0, limit);
+        }
+
+        filterInfo.innerHTML = enableDateFilter.checked
+          ? `共找到 <strong>${data.total}</strong> 个视频，日期范围内 <strong>${data.filtered}</strong> 个${limit ? `，限制 <strong>${videos.length}</strong> 个` : ''}`
+          : `共找到 <strong>${data.total}</strong> 个视频${limit ? `，限制 <strong>${videos.length}</strong> 个` : ''}`;
+
+        renderVideoList(videoList, videos);
+        filterResultCard.classList.remove('hidden');
+
+      } catch (e) {
+        alert('获取失败: ' + e.message);
+      } finally {
+        fetchVideosBtn.disabled = false;
+        fetchVideosBtn.textContent = '获取视频列表';
+      }
+    });
+
+    startBtn.addEventListener('click', async () => {
+      if (videos.length === 0) {
+        alert('没有可处理的视频');
+        return;
+      }
+
+      // 显示进度区域
+      filterResultCard.classList.add('hidden');
+      progressCard.classList.add('active');
+      logCard.classList.add('active');
+      completeCard.classList.add('hidden');
+
+      // 复制视频列表到进度区域
+      renderVideoList(progressVideoList, videos);
+
+      // 清空日志
+      logBox.innerHTML = '';
+
+      try {
+        const input = targetInput.value.trim();
+        const match = input.match(/(\d+)/);
+        const uid = match ? match[0] : input;
+
+        await fetch('/api/start-task', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uid,
+            videos,
+            format: outputFormat.value
+          })
+        });
+      } catch (e) {
+        alert('启动失败: ' + e.message);
+      }
+    });
+
+    document.getElementById('restartBtn').addEventListener('click', () => {
+      location.reload();
+    });
+
+    // 初始化
+    init();
+  </script>
+</body>
+</html>
