@@ -248,8 +248,12 @@
     }
 
     .video-status-icon.pending { color: #bbb; }
-    .video-status-icon.downloading, .video-status-icon.transcribing { color: #3498db; }
-    .video-status-icon.completed { color: #2ecc71; }
+    .video-status-icon.downloading, .video-status-icon.transcribing {
+      color: #3498db;
+      animation: spin 1s linear infinite;
+    }
+    .video-status-icon.downloaded { color: #9b59b6; }
+    .video-status-icon.completed, .video-status-icon.transcribed { color: #2ecc71; }
     .video-status-icon.error { color: #e74c3c; }
 
     .video-info {
@@ -599,8 +603,12 @@
     }
 
     function updateVideoStatus(bvid, status, error) {
-      const item = document.querySelector(`[data-bvid="${bvid}"]`);
-      if (!item) return;
+      // 在进度列表中查找
+      const item = progressVideoList.querySelector(`[data-bvid="${bvid}"]`);
+      if (!item) {
+        console.log('找不到视频元素:', bvid);
+        return;
+      }
 
       const icon = item.querySelector('.video-status-icon');
       icon.className = `video-status-icon ${status}`;

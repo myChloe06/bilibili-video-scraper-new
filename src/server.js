@@ -36,8 +36,12 @@ wss.on('connection', (ws) => {
 
 // 发送进度到前端
 function sendProgress(type, data) {
+  const message = { type, ...data };
+  console.log('[WS]', type, data.bvid || data.step || data.message || '');
   if (wsClient && wsClient.readyState === WebSocket.OPEN) {
-    wsClient.send(JSON.stringify({ type, ...data }));
+    wsClient.send(JSON.stringify(message));
+  } else {
+    console.log('[WS] 客户端未连接');
   }
 }
 
