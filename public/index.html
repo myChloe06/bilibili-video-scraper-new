@@ -550,10 +550,23 @@
 
         case 'video-status':
           updateVideoStatus(data.bvid, data.status, data.error);
+          // 添加日志
+          if (data.status === 'downloading') {
+            addLog('info', `正在下载: ${data.bvid}`);
+          } else if (data.status === 'downloaded') {
+            addLog('success', `下载完成: ${data.bvid}`);
+          } else if (data.status === 'transcribing') {
+            addLog('info', `正在转写: ${data.bvid}`);
+          } else if (data.status === 'transcribed') {
+            addLog('success', `转写完成: ${data.bvid}`);
+          } else if (data.status === 'error') {
+            addLog('error', `失败 [${data.bvid}]: ${data.error}`);
+          }
           break;
 
         case 'complete':
           showComplete(data);
+          addLog('success', '任务完成！');
           break;
 
         case 'error':
