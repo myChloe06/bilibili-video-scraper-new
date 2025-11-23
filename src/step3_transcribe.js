@@ -184,19 +184,33 @@ async function waitForTask(taskId, timeout = 3600000) {
  * 转写单个音频文件
  */
 async function transcribeAudio(audioPath) {
+  // 检查文件大小
+  const stats = await fs.stat(audioPath);
+  const fileSizeMB = stats.size / (1024 * 1024);
+  logger.info(`音频文件大小: ${fileSizeMB.toFixed(2)} MB`);
+
+  if (fileSizeMB > 500) {
+    throw new Error(`文件过大 (${fileSizeMB.toFixed(2)} MB)，百度云 API 限制 500MB`);
+  }
+
   // 读取文件并转为 Base64
+  logger.info('正在读取音频文件...');
   const audioBase64 = await audioToBase64(audioPath);
 
   // 创建任务
+  logger.info('正在创建转写任务...');
   const taskId = await createTask(audioBase64, config.download.format);
   logger.info(`已创建转写任务: ${taskId}`);
 
   // 等待结果
+  logger.info('等待转写完成（可能需要几分钟）...');
   const result = await waitForTask(taskId);
 
   // 提取文字
   if (result && result.result) {
-    return result.result.join('');
+    const text = result.result.join('');
+    logger.info(`转写完成，共 ${text.length} 字`);
+    return text;
   }
 
   return '';

@@ -70,7 +70,13 @@ async function downloadAudio(video, uid, pageNum = null) {
     let stderr = '';
 
     ytdlp.stdout.on('data', (data) => {
-      stdout += data.toString();
+      const output = data.toString();
+      stdout += output;
+      // 解析下载进度并输出
+      const match = output.match(/(\d+\.?\d*)%/);
+      if (match) {
+        process.stdout.write(`\r[${bvid}] 下载进度: ${match[1]}%`);
+      }
     });
 
     ytdlp.stderr.on('data', (data) => {
@@ -78,6 +84,7 @@ async function downloadAudio(video, uid, pageNum = null) {
     });
 
     ytdlp.on('close', (code) => {
+      process.stdout.write('\n'); // 换行
       if (code === 0) {
         logger.success(`下载完成: ${fileName}`);
         resolve({ success: true, path: outputPath, skipped: false });
