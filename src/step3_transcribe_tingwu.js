@@ -1,4 +1,3 @@
-const { chromium } = require('playwright');
 const path = require('path');
 const fs = require('fs-extra');
 const logger = require('./utils/logger');
@@ -10,6 +9,35 @@ const TINGWU_URL = 'https://tingwu.aliyun.com/';
 
 let browser = null;
 let context = null;
+let playwrightAvailable = null;
+
+/**
+ * 检查 Playwright 是否可用
+ */
+function checkPlaywright() {
+  if (playwrightAvailable !== null) {
+    return playwrightAvailable;
+  }
+
+  try {
+    require.resolve('playwright');
+    playwrightAvailable = true;
+    return true;
+  } catch {
+    playwrightAvailable = false;
+    return false;
+  }
+}
+
+/**
+ * 获取 chromium（延迟加载）
+ */
+function getChromium() {
+  if (!checkPlaywright()) {
+    throw new Error('Playwright 未安装，请运行: npm install playwright && npx playwright install chromium');
+  }
+  return require('playwright').chromium;
+}
 
 /**
  * 初始化浏览器
@@ -17,6 +45,7 @@ let context = null;
 async function initBrowser(headless = false) {
   if (browser) return;
 
+  const chromium = getChromium();
   await fs.ensureDir(USER_DATA_DIR);
 
   browser = await chromium.launchPersistentContext(USER_DATA_DIR, {
@@ -98,6 +127,11 @@ async function waitForLogin(page, sendProgress = null) {
  * 上传音频文件并获取转写结果
  */
 async function transcribeWithTingwu(audioPath, sendProgress = null) {
+  // 检查 Playwright
+  if (!checkPlaywright()) {
+    throw new Error('Playwright 未安装，请运行: npm install playwright && npx playwright install chromium');
+  }
+
   if (!await fs.pathExists(audioPath)) {
     throw new Error(`音频文件不存在: ${audioPath}`);
   }
@@ -273,6 +307,7 @@ async function transcribeVideosWithTingwu(videos, uid, sendProgress = null) {
 }
 
 module.exports = {
+  checkPlaywright,
   initBrowser,
   closeBrowser,
   transcribeWithTingwu,
